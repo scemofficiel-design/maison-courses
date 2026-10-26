@@ -12,14 +12,14 @@ Dernière mise à jour : 26 octobre 2026 — version 0.1.0 (schéma v1, données
 | 4. Profils : personnes, règles, plans réutilisables, portions individuelles, activation | ✅ Terminée |
 | 5. Import du plan familial : 8 semaines, 4 listes, prix, 3 profils, règles, vérification | ✅ Terminée (24/24 contrôles) |
 | 6. Optimisation et finition : anti-gaspillage, priorités, substitutions, fournitures, tableau de bord, tests, docs | ✅ Terminée pour la v1 |
-| Déploiement GitHub Pages | ⏳ Workflow prêt ; publication en attente de l’accord sur la visibilité du dépôt |
+| Déploiement GitHub Pages | ✅ https://scemofficiel-design.github.io/maison-courses/ (dépôt public https://github.com/scemofficiel-design/maison-courses) |
 
 ## Tests exécutés
 
 - **Unitaires (Vitest, 60 tests)** — `npm test` : unités et arrondis, stock inconnu/nul, alertes, mise à l’échelle et portions individuelles, regroupement, génération des listes (règle « ne pas racheter si le stock suffit »), budget, restrictions (interdits, cuisson, huile par repas), CRUD produit, achats idempotents et correction, préparation confirmée et non-double déduction, import du plan (8 semaines, 4 listes, budgets exacts), démarrage/désactivation/réactivation du plan, données initiales versionnées et réinitialisation sélective, persistance après réouverture, export/restauration, rejet d’une sauvegarde invalide, 24 contrôles d’importation du PDF.
 - **Bout en bout (Playwright, 5 tests)** — `npm run test:e2e` sur la version de production servie sous `/maison-courses/` : manifeste, icônes et portée du service worker sous sous-chemin ; démarrage du plan et persistance après rechargement ; achat en magasin idempotent ; fonctionnement hors ligne (lecture et modification) ; export puis restauration depuis l’interface.
 
-Correspondance avec la liste demandée : 1 ✅, 2 ✅, 3 ✅, 4 ✅, 5 ✅, 6 ✅, 7 ✅, 8 ✅, 9 ✅, 10 ✅, 11 ✅, 12 ✅, 13 ✅, 14 ✅, 15 ✅, 16 ✅, 17 ✅, 18 ✅, 19 ✅ (sur un serveur local reproduisant le sous-chemin ; à revérifier sur l’URL GitHub Pages réelle une fois publiée).
+Correspondance avec la liste demandée : 1 ✅, 2 ✅, 3 ✅, 4 ✅, 5 ✅, 6 ✅, 7 ✅, 8 ✅, 9 ✅, 10 ✅, 11 ✅, 12 ✅, 13 ✅, 14 ✅, 15 ✅, 16 ✅, 17 ✅, 18 ✅, 19 ✅ (serveur local reproduisant le sous-chemin, puis URL réelle : page, manifeste, service worker, icônes et écrans de lancement en 200 ; portée du service worker `/maison-courses/` et cache hors ligne rempli).
 
 Non testé automatiquement : Safari iOS réel (les tests utilisent Chromium avec un gabarit mobile). À vérifier sur l’iPhone : ajout à l’écran d’accueil, écran de lancement, export via la feuille de partage.
 
@@ -43,6 +43,6 @@ Non testé automatiquement : Safari iOS réel (les tests utilisent Chromium avec
 
 ## Prochaines actions possibles
 
-1. Publier sur GitHub Pages (dépôt et visibilité à confirmer), puis vérifier l’URL réelle et l’installation sur iPhone.
+1. Installer sur l’iPhone depuis Safari et faire une première sauvegarde.
 2. Saisir l’inventaire initial (Stocks → filtre « Inconnus »), les conversions du pain et de l’huile.
 3. Évolutions : synchronisation facultative entre appareils, version anglaise complète, lecture de codes-barres si une solution iOS fiable devient disponible.
