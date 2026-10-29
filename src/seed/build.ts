@@ -1,7 +1,7 @@
 import type {
-  Budget, Category, DietProfile, Location, MealPlan, Person, Product, Recipe, ShoppingLine, ShoppingList, Substitution, TemplateMeal,
+  Budget, Category, DietProfile, Location, MealPlan, Person, Product, ProductFamily, Recipe, ShoppingLine, ShoppingList, Substitution, TemplateMeal,
 } from '../domain/types';
-import { CATEGORIES, LOCATIONS, PRODUCTS, ROW_PRODUCT, parseDocQuantity } from './catalog';
+import { CATEGORIES, FAMILIES, LOCATIONS, PRODUCT_FAMILY, PRODUCTS, ROW_PRODUCT, parseDocQuantity } from './catalog';
 import {
   BREAKFASTS, BUDGET_ECONOMY, BUDGET_ECONOMY_TOTAL, BUDGET_TARGET, BUDGET_TARGET_TOTAL, DOCUMENT_NAME, ECONOMY_DEFINITION, HYPOTHESES,
   MENU_WEEKS, OPTIMIZATION_PRINCIPLES, PAGE1_FOOTNOTE, PAGE1_PRINCIPLE, SHOPPING_ROWS, SNACKS_TEXT, WATER_TEXT,
@@ -9,8 +9,11 @@ import {
 import { PERSONS, PROFILES } from './profiles';
 import { BREAKFAST_RECIPE, MENU_ITEM_RECIPE, PROFILE_GM, PROFILE_MOI, PROFILE_NOUS, RECIPES } from './recipes';
 
-/** Version des données initiales. L'augmenter lorsque les données de démonstration changent. */
-export const SEED_VERSION = 1;
+/**
+ * Version des données initiales. L'augmenter lorsque les données de démonstration changent.
+ * v2 : familles de produits, variantes et formats d'achat du catalogue.
+ */
+export const SEED_VERSION = 2;
 
 export const FAMILY_PLAN_ID = 'plan-famille-gm';
 export const FAMILY_PLAN_NAME = 'Plan familial — 8 semaines avec grand-mère';
@@ -18,6 +21,7 @@ export const FAMILY_PLAN_NAME = 'Plan familial — 8 semaines avec grand-mère';
 export interface SeedData {
   categories: Category[];
   locations: Location[];
+  families: ProductFamily[];
   products: Product[];
   recipes: Recipe[];
   profiles: DietProfile[];
@@ -57,12 +61,21 @@ function buildTemplate(): TemplateMeal[] {
   return out;
 }
 
+function familyFields(productId: string): Pick<Product, 'familyId' | 'variant' | 'format'> {
+  const m = PRODUCT_FAMILY[productId];
+  if (!m) return {};
+  const [fam, variant, format] = m;
+  return { familyId: `fam-${fam}`, ...(variant ? { variant } : {}), ...(format ? { format } : {}) };
+}
+
 export function buildSeed(now: string): SeedData {
   const stamp = { createdAt: now, updatedAt: now };
   const categories: Category[] = CATEGORIES.map((c, order) => ({ ...c, ...stamp, order, seedKey: `category:${c.id}` }));
   const locations: Location[] = LOCATIONS.map((l, order) => ({ ...l, ...stamp, order, seedKey: `location:${l.id}` }));
+  const families: ProductFamily[] = FAMILIES.map((x) => ({ ...x, ...stamp, seedKey: `family:${x.id}` }));
   const products: Product[] = PRODUCTS.map((p) => ({
     ...p,
+    ...familyFields(p.id),
     ...stamp,
     seedKey: `product:${p.id}`,
     // Le document ne contient aucun inventaire : la quantité est inconnue, et non nulle.
@@ -164,5 +177,5 @@ export function buildSeed(now: string): SeedData {
     { id: 'sub-eco-yaourt', fromLabel: 'Petits pots de yaourt', toLabel: 'Yaourt nature en pot de 750 g', toProductId: 'p-yaourt', reason: 'Levier d’économie non chiffré', economy: true, source: S },
   ].map((s) => ({ ...s, ...stamp, seedKey: `substitution:${s.id}` }));
 
-  return { categories, locations, products, recipes, profiles, persons, plans: [plan], lists, lines, budgets, substitutions };
+  return { categories, locations, families, products, recipes, profiles, persons, plans: [plan], lists, lines, budgets, substitutions };
 }

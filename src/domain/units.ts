@@ -2,7 +2,8 @@ import type { Product, Unit } from './types';
 
 export const ALL_UNITS: Unit[] = [
   'unité', 'g', 'kg', 'ml', 'L', 'paquet', 'bouteille', 'boîte', 'pot', 'sac', 'douzaine',
-  'botte', 'tête', 'tranche', 'rouleau', 'pain', 'morceau', 'c. à soupe', 'c. à café', 'pincée', 'bol',
+  'botte', 'tête', 'tranche', 'rouleau', 'pain', 'morceau', 'grappe', 'barquette', 'pack', 'sachet', 'filet', 'bocal',
+  'c. à soupe', 'c. à café', 'pincée', 'bol',
 ];
 
 /** Unités converties entre elles via une unité de base commune. */
@@ -49,7 +50,10 @@ export function convert(quantity: number, from: Unit, to: Unit, product?: Pick<P
 }
 
 /** Unités vendues à la pièce : sans format de vente précisé, on achète des unités entières. */
-const COUNT_UNITS: Unit[] = ['unité', 'douzaine', 'paquet', 'bouteille', 'boîte', 'pot', 'sac', 'botte', 'tête', 'tranche', 'rouleau', 'pain', 'morceau'];
+const COUNT_UNITS: Unit[] = [
+  'unité', 'douzaine', 'paquet', 'bouteille', 'boîte', 'pot', 'sac', 'botte', 'tête', 'tranche', 'rouleau', 'pain', 'morceau',
+  'grappe', 'barquette', 'pack', 'sachet', 'filet', 'bocal',
+];
 export function saleStep(p: Pick<Product, 'unit' | 'purchaseStep'>): number | undefined {
   return p.purchaseStep ?? (COUNT_UNITS.includes(p.unit) ? 1 : undefined);
 }
@@ -96,6 +100,12 @@ export function unitLabel(unit: Unit, quantity = 1): string {
     case 'morceau': return 'morceaux';
     case 'bol': return 'bols';
     case 'pincée': return 'pincées';
+    case 'grappe': return 'grappes';
+    case 'barquette': return 'barquettes';
+    case 'pack': return 'packs';
+    case 'sachet': return 'sachets';
+    case 'filet': return 'filets';
+    case 'bocal': return 'bocaux';
     default: return unit;
   }
 }

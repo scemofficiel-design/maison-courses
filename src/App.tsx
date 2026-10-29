@@ -23,6 +23,8 @@ import SettingsPage from './pages/Settings';
 import MorePage from './pages/More';
 import SuggestionsPage from './pages/Suggestions';
 import BudgetPage from './pages/Budget';
+import ImportPage from './pages/Import';
+import FamilyPage from './pages/Family';
 
 const NAV = [
   { to: '/', label: t.nav.home, icon: Home, end: true },
@@ -61,8 +63,10 @@ function Shell() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/stocks" element={<StocksPage />} />
+          <Route path="/stocks/famille/:id" element={<FamilyPage />} />
           <Route path="/stocks/:id" element={<ProductPage />} />
           <Route path="/courses" element={<ShoppingPage />} />
+          <Route path="/courses/import" element={<ImportPage />} />
           <Route path="/courses/:id" element={<ListPage />} />
           <Route path="/budget" element={<BudgetPage />} />
           <Route path="/menus" element={<MenusPage />} />

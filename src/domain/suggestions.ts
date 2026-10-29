@@ -1,7 +1,8 @@
+import { allocateStock, proposalText } from './families';
 import { expiryLevel, usableQuantity } from './stock';
 import { aggregateRequirements, mealRequirements, type Diner } from './portions';
 import { checkMealForProfiles, type Violation } from './restrictions';
-import type { ID, ISODate, MealSlot, Product, Recipe, Unit } from './types';
+import type { ID, ISODate, MealSlot, Product, ProductFamily, Recipe, Unit } from './types';
 import { round2, roundUpToStep, saleStep } from './units';
 
 export interface FeasibilityItem {
@@ -13,6 +14,10 @@ export interface FeasibilityItem {
   unit: Unit;
   optional: boolean;
   extraCost?: number;
+  /** Références équivalentes utilisées à la place du produit demandé (ex. « Raisins verts »). */
+  via?: string[];
+  /** Remplacements possibles à confirmer. */
+  proposals?: string[];
 }
 
 export interface Feasibility {
@@ -41,9 +46,12 @@ export function mealFeasibility(
   products: Map<ID, Product>,
   on: ISODate,
   warningDays: number,
+  families?: Map<ID, ProductFamily>,
 ): Feasibility {
   const reqs = mealRequirements(recipes, diners, slot, title);
   const { needs, unconverted } = aggregateRequirements(reqs, products);
+  const profiles = uniqueProfiles(diners);
+  const alloc = families ? allocateStock([...needs.values()], products, families, new Map(profiles.map((p) => [p.id, p])), on).coverage : undefined;
   const available: FeasibilityItem[] = [];
   const missing: FeasibilityItem[] = [];
   const unknown: FeasibilityItem[] = [];
@@ -53,10 +61,15 @@ export function mealFeasibility(
   let okRequired = 0;
   for (const n of needs.values()) {
     const p = products.get(n.productId)!;
-    const have = usableQuantity(p, on);
+    const own = usableQuantity(p, on);
+    const cov = alloc?.get(p.id);
+    // Avec les familles : stock propre + références équivalentes utilisées (inconnu si rien ne couvre un stock inconnu).
+    const have = cov ? (cov.unknown ? null : round2(cov.covered)) : own;
     const item: FeasibilityItem = { productId: p.id, name: p.name, need: n.quantity, have, missing: 0, unit: p.unit, optional: n.optional };
+    if (cov?.uses.length) item.via = cov.uses.map((u) => u.name);
+    if (cov?.proposals.length) item.proposals = cov.proposals.map(proposalText);
     if (!n.optional) required++;
-    if (expiryLevel(p, on, warningDays) === 'bientôt' && (have ?? 0) > 0) priorityProducts.push(p.name);
+    if (expiryLevel(p, on, warningDays) === 'bientôt' && (own ?? 0) > 0) priorityProducts.push(p.name);
     if (have === null) {
       unknown.push(item);
     } else if (have + 1e-9 >= n.quantity) {
@@ -71,7 +84,6 @@ export function mealFeasibility(
       missing.push(item);
     }
   }
-  const profiles = uniqueProfiles(diners);
   const violations = checkMealForProfiles(recipes, profiles, products);
   const coverage = required === 0 ? 1 : okRequired / required;
   const why: string[] = [];
@@ -79,6 +91,8 @@ export function mealFeasibility(
   else if (coverage >= 0.5) why.push(`${okRequired} ingrédient(s) sur ${required} déjà disponibles`);
   if (priorityProducts.length) why.push(`Utilise des produits à consommer vite : ${priorityProducts.join(', ')}`);
   if (unknown.length) why.push(`Stock inconnu pour : ${unknown.map((u) => u.name).join(', ')}`);
+  const subst = available.filter((a) => a.via?.length);
+  if (subst.length) why.push(`Variantes utilisées : ${subst.map((a) => `${a.via!.join(', ')} pour ${a.name}`).join(' ; ')}`);
   return {
     title,
     recipeIds: recipes.map((r) => r.id),

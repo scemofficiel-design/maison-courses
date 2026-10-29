@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../db/db';
 import { confirmCooked, deleteMeal, previewCooking, undoCooked, updateMeal, type ConsumptionLine } from '../db/mealOps';
-import { dinersForMeal, loadContext, requirementsForMeal } from '../db/queries';
+import { coverageFor, dinersForMeal, loadContext, requirementsForMeal } from '../db/queries';
 import { addMissingToList } from '../db/shoppingOps';
 import { formatDateLong } from '../domain/dates';
+import { proposalText } from '../domain/families';
 import { aggregateRequirements } from '../domain/portions';
 import { checkMealForProfiles } from '../domain/restrictions';
-import { usableQuantity } from '../domain/stock';
 import { uniqueProfiles } from '../domain/suggestions';
 import type { MealSlot, Recipe } from '../domain/types';
 import { formatQty } from '../domain/units';
@@ -28,10 +28,16 @@ export default function MealPage() {
     const diners = dinersForMeal(meal, ctx);
     const recipes = meal.recipeIds.map((r) => ctx.recipes.get(r)).filter((r): r is Recipe => !!r);
     const { needs, unconverted } = aggregateRequirements(requirementsForMeal(meal, ctx), ctx.products);
+    const cover = coverageFor(needs, ctx, meal.date);
     const items = [...needs.values()].map((n) => {
       const p = ctx.products.get(n.productId)!;
-      const have = usableQuantity(p, meal.date);
-      return { ...n, name: p.name, have, missing: have === null ? null : Math.max(0, n.quantity - have) };
+      const c = cover.get(p.id);
+      const have = !c || c.unknown ? null : c.covered;
+      return {
+        ...n, name: p.name, have, missing: have === null ? null : c!.shortfall,
+        via: c?.uses.map((u) => `${u.name} (${formatQty(u.sourceQuantity, u.sourceUnit)})`) ?? [],
+        proposals: c?.proposals.map(proposalText) ?? [],
+      };
     }).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
     const violations = checkMealForProfiles(recipes, uniqueProfiles(diners), ctx.products);
     const log = await db.mealLogs.where('plannedMealId').equals(id).filter((l) => !l.reversed).first();
@@ -124,7 +130,9 @@ export default function MealPage() {
           <div className="list">
             {items.map((i) => (
               <div key={i.productId} className="item">
-                <span className="grow"><span className="title">{i.name}</span>{i.optional && <span className="badge" style={{ marginLeft: 6 }}>Facultatif</span>}<div className="meta">{formatQty(i.quantity, i.unit)}</div></span>
+                <span className="grow"><span className="title">{i.name}</span>{i.optional && <span className="badge" style={{ marginLeft: 6 }}>Facultatif</span>}<div className="meta">{formatQty(i.quantity, i.unit)}</div>
+                  {i.via.length > 0 && <div className="tiny" style={{ color: 'var(--ok)' }}>Avec {i.via.join(', ')}</div>}
+                  {i.proposals.map((t, n) => <div key={n} className="tiny muted">{t}</div>)}</span>
                 {i.have === null ? <span className="badge info">Stock inconnu</span> : (i.missing ?? 0) > 1e-9 ? <span className="badge danger">Manque {formatQty(i.missing!, i.unit)}</span> : <span className="badge ok">Disponible</span>}
               </div>
             ))}
@@ -172,7 +180,7 @@ export default function MealPage() {
         <p className="small muted">Corrigez les quantités réellement utilisées. Mettez 0 pour ne rien déduire.</p>
         {cook?.map((c, i) => (
           <div key={c.productId} className="row">
-            <span className="grow"><span className="strong">{c.name}</span><div className="tiny muted">En stock : {c.stock === null ? 'inconnu' : formatQty(c.stock, c.unit)}</div></span>
+            <span className="grow"><span className="strong">{c.name}</span><div className="tiny muted">En stock : {c.stock === null ? 'inconnu' : formatQty(c.stock, c.unit)}{c.replaces?.length ? ` · à la place de ${c.replaces.join(', ')}` : ''}</div></span>
             <div style={{ width: 100 }}><NumberInput value={c.quantity} onChange={(v) => setCook((x) => x && x.map((y, j) => (j === i ? { ...y, quantity: v ?? 0 } : y)))} ariaLabel={`Quantité utilisée : ${c.name}`} /></div>
             <span className="small" style={{ width: 54 }}>{c.unit}</span>
           </div>

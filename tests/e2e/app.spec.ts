@@ -144,3 +144,29 @@ test('saisie continue au clavier dans les volets (texte et nombres)', async ({ p
   await expect(page.getByRole('searchbox')).toHaveValue('parfum');
   await expect(page.getByText('12,5 kg').or(page.getByText('12,5 unités'))).toBeVisible();
 });
+
+test('import d’un reçu : aperçu, ajout au stock, refus du doublon, vue par famille', async ({ page }) => {
+  await page.goto('./#/courses/import');
+  await expect(page.getByRole('heading', { name: 'Importer un reçu' })).toBeVisible({ timeout: 20_000 });
+  await page.locator('input[type="file"]').setInputFiles('examples/recu-exemple.json');
+  // Aperçu : magasin, produit existant reconnu, nouvelle variante proposée dans la bonne famille
+  await expect(page.getByText('Maxi', { exact: true })).toBeVisible();
+  await expect(page.getByText('Nouvelle variante de la famille « Raisins »')).toBeVisible();
+  await page.getByLabel('Liste de courses associée').selectOption('');
+  await page.getByRole('button', { name: 'Importer', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Importer' }).click();
+  await expect(page.locator('strong', { hasText: 'Reçu importé' })).toBeVisible();
+  // Même fichier une seconde fois : refusé
+  await page.getByRole('button', { name: 'Importer un autre reçu' }).click();
+  await page.locator('input[type="file"]').setInputFiles('examples/recu-exemple.json');
+  await expect(page.getByText(/Ce reçu a déjà été importé/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Importer', exact: true })).toBeDisabled();
+  // Stock ajouté au produit existant (stock inconnu → au moins la quantité achetée), après rechargement
+  await page.goto('./#/stocks/p-riz');
+  await expect(page.getByText('2 kg', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Historique des prix')).toBeVisible();
+  // Famille Yaourts : stock global des deux variantes
+  await page.goto('./#/stocks/famille/fam-yaourts');
+  await expect(page.getByText('6 pots', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('link', { name: /Yaourts aux fraises/ })).toBeVisible();
+});

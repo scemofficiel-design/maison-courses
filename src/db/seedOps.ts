@@ -4,25 +4,43 @@ import { DEFAULT_SETTINGS } from './entityOps';
 import { nowISO } from './util';
 
 type SeedTable = keyof SeedData;
-const SEED_TABLES: SeedTable[] = ['categories', 'locations', 'products', 'recipes', 'profiles', 'persons', 'plans', 'lists', 'lines', 'budgets', 'substitutions'];
+const SEED_TABLES: SeedTable[] = ['categories', 'locations', 'families', 'products', 'recipes', 'profiles', 'persons', 'plans', 'lists', 'lines', 'budgets', 'substitutions'];
 
 /**
  * Champs « vivants » : ils décrivent l'état réel de la maison (stock, achats, dates du plan).
  * Une mise à jour ou une réinitialisation des données initiales ne les modifie jamais.
  */
 const LIVE_FIELDS: Partial<Record<SeedTable, string[]>> = {
-  products: ['quantity', 'purchaseDate', 'expiryDate', 'archived', 'locationId'],
+  products: ['quantity', 'purchaseDate', 'expiryDate', 'archived', 'locationId', 'receiptNames', 'lastPrice'],
   plans: ['active', 'startDate', 'endDate', 'materialized', 'archivedAt'],
   lists: ['status', 'periodStart', 'periodEnd', 'plannedDate'],
   lines: ['status', 'actualQuantity', 'actualPrice', 'purchaseId'],
   budgets: ['periodStart', 'periodEnd'],
 };
 
+/** Prix réellement payés (reçu, achat en magasin) : ils priment sur les estimations du document. */
+const VERIFIED_PRICE_FIELDS = ['unitPrice', 'priceStatus', 'priceSource'];
+
 function keepLive(table: SeedTable, fresh: Record<string, unknown>, current: Record<string, unknown>) {
   const out = { ...fresh };
   for (const f of LIVE_FIELDS[table] ?? []) if (f in current) out[f] = current[f];
+  if (table === 'products' && current.priceStatus === 'vérifié') for (const f of VERIFIED_PRICE_FIELDS) out[f] = current[f];
   out.createdAt = current.createdAt ?? fresh.createdAt;
   return out;
+}
+
+/**
+ * Nouveaux champs d'une version des données initiales, ajoutés même à une donnée modifiée par
+ * l'utilisateur, seulement s'ils y sont absents (rien de ce qu'il a saisi n'est remplacé).
+ */
+const ADDITIVE_FIELDS: Partial<Record<SeedTable, string[]>> = {
+  products: ['familyId', 'variant', 'format'],
+};
+
+function addMissing(table: SeedTable, fresh: Record<string, unknown>, current: Record<string, unknown>) {
+  const patch: Record<string, unknown> = {};
+  for (const f of ADDITIVE_FIELDS[table] ?? []) if (current[f] === undefined && fresh[f] !== undefined) patch[f] = fresh[f];
+  return Object.keys(patch).length ? patch : undefined;
 }
 
 async function getMeta<T>(key: string): Promise<T | undefined> {
@@ -48,6 +66,9 @@ export async function ensureSeed(): Promise<'installé' | 'mis à jour' | 'à jo
           if (!known.has(row.seedKey as string)) await table.add(row);
         } else if (!current.userModified) {
           await table.put(keepLive(t, row, current));
+        } else {
+          const patch = addMissing(t, row, current);
+          if (patch) await table.update(row.id as string, patch);
         }
         known.add(row.seedKey as string);
       }
@@ -67,7 +88,7 @@ const SCOPE_TABLES: Record<ResetScope, SeedTable[]> = {
   profiles: ['profiles', 'persons'],
   plan: ['plans', 'budgets', 'substitutions'],
   lists: ['lists', 'lines'],
-  catalog: ['categories', 'locations', 'products'],
+  catalog: ['categories', 'locations', 'families', 'products'],
 };
 
 /**

@@ -5,9 +5,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { db } from '../db/db';
 import { deleteRecipe, duplicateRecipe, updateRecipe } from '../db/entityOps';
 import { createMeal } from '../db/mealOps';
+import { allocateStock, type NeedInput } from '../domain/families';
 import { scaleQuantity } from '../domain/portions';
 import { checkMeal } from '../domain/restrictions';
-import { usableQuantity } from '../domain/stock';
 import type { IngredientRole, MealSlot, Recipe, RecipeIngredient, ScalingMode, Unit } from '../domain/types';
 import { ALL_UNITS, convert, formatMoney, formatQty, round2 } from '../domain/units';
 import { SLOTS, t } from '../i18n/fr';
@@ -27,6 +27,7 @@ export default function RecipePage() {
   const { productById } = useCatalog();
   const recipe = useLiveQuery(() => db.recipes.get(id), [id]);
   const profiles = useLiveQuery(() => db.profiles.toArray(), []) ?? [];
+  const families = useLiveQuery(async () => new Map((await db.families.toArray()).map((f) => [f.id, f])), []);
   const [servings, setServings] = useState<number>(Number(params.get('portions')) || 0);
   const [overrides, setOverrides] = useState<Record<number, number | null>>({});
   const [edit, setEdit] = useState<Recipe | null>(null);
@@ -55,6 +56,19 @@ export default function RecipePage() {
     else costKnown = false;
   }
   const products = productById;
+  // Disponibilité : stock propre puis références équivalentes autorisées pour tous les profils enregistrés.
+  const needInputs: NeedInput[] = [];
+  for (const { ing, i } of common) {
+    const p = products.get(ing.productId);
+    const inUnit = p ? convert(overrides[i] ?? scaleQuantity(ing.quantity, ing.scaling, ratio), ing.unit, p.unit, p) : null;
+    if (p && inUnit !== null && !ing.toTaste) needInputs.push({ productId: p.id, quantity: inUnit, exactVariant: ing.exactVariant, profileIds: profiles.map((x) => x.id) });
+  }
+  const merged = new Map<string, NeedInput>();
+  for (const n of needInputs) {
+    const prev = merged.get(n.productId);
+    merged.set(n.productId, prev ? { ...prev, quantity: prev.quantity + n.quantity, exactVariant: prev.exactVariant || n.exactVariant } : n);
+  }
+  const cover = allocateStock([...merged.values()], products, families ?? new Map(), new Map(profiles.map((x) => [x.id, x])), on).coverage;
 
   return (
     <div className="stack">
@@ -75,9 +89,9 @@ export default function RecipePage() {
           {common.map(({ ing, i }) => {
             const p = products.get(ing.productId);
             const scaled = round2(scaleQuantity(ing.quantity, ing.scaling, ratio));
-            const have = p ? usableQuantity(p, on) : null;
-            const inUnit = p ? convert(overrides[i] ?? scaled, ing.unit, p.unit, p) : null;
-            const enough = have !== null && inUnit !== null && have >= inUnit;
+            const c = p ? cover.get(p.id) : undefined;
+            const have = !c || c.unknown ? null : c.covered;
+            const enough = !!c && have !== null && c.shortfall <= 1e-9;
             return (
               <div key={i} className="row" style={{ alignItems: 'flex-start' }}>
                 <div className="grow">
@@ -85,6 +99,8 @@ export default function RecipePage() {
                   {ing.optional && <span className="badge" style={{ marginLeft: 6 }}>Facultatif</span>}
                   {ing.toTaste && <span className="badge" style={{ marginLeft: 6 }}>Au goût</span>}
                   {ing.note && <div className="tiny muted">{ing.note}</div>}
+                  {c?.uses.length ? <div className="tiny" style={{ color: 'var(--ok)' }}>Disponible avec {c.uses.map((u) => u.name).join(', ')}</div> : null}
+                  {ing.exactVariant && <div className="tiny muted">Variante exigée par la recette</div>}
                   {ing.scaling === 'modéré' && ratio !== 1 && <div className="tiny muted">Assaisonnement : non multiplié linéairement, ajustez au goût.</div>}
                 </div>
                 {ing.scaling === 'linéaire' || ratio === 1 ? (
@@ -175,6 +191,7 @@ export default function RecipePage() {
 function RecipeForm({ r, onChange, onAddIngredient }: { r: Recipe; onChange: (r: Recipe) => void; onAddIngredient: () => void }) {
   const { productById } = useCatalog();
   const profiles = useLiveQuery(() => db.profiles.toArray(), []) ?? [];
+  const families = useLiveQuery(async () => new Map((await db.families.toArray()).map((f) => [f.id, f])), []);
   const setIng = (i: number, patch: Partial<RecipeIngredient>) => onChange({ ...r, ingredients: r.ingredients.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   return (
     <div className="stack">
@@ -215,6 +232,12 @@ function RecipeForm({ r, onChange, onAddIngredient }: { r: Recipe; onChange: (r:
             <div className="row wrap" style={{ gap: 12 }}>
               <label className="check small"><input type="checkbox" checked={!!ing.optional} onChange={(e) => setIng(i, { optional: e.target.checked })} /> Facultatif</label>
               <label className="check small"><input type="checkbox" checked={!!ing.toTaste} onChange={(e) => setIng(i, { toTaste: e.target.checked })} /> Au goût (non compté)</label>
+              {(() => {
+                const fam = families?.get(productById.get(ing.productId)?.familyId ?? '');
+                return fam ? (
+                  <label className="check small"><input type="checkbox" checked={!!ing.exactVariant} onChange={(e) => setIng(i, { exactVariant: e.target.checked || undefined })} /> Cette variante seulement (pas d’autre {fam.name.toLowerCase()})</label>
+                ) : null;
+              })()}
             </div>
             <select value={ing.onlyForProfileIds?.[0] ?? ''} onChange={(e) => setIng(i, { onlyForProfileIds: e.target.value ? [e.target.value] : undefined })} aria-label="Réservé à un profil">
               <option value="">Plat commun (tout le monde)</option>

@@ -2,7 +2,7 @@ import { addDays, daysBetween } from '../domain/dates';
 import { aggregateRequirements } from '../domain/portions';
 import type { ID, ISODate, MealLog, MealSlot, PlannedMeal, Unit } from '../domain/types';
 import { db } from './db';
-import { dinersOn, loadContext, plansOn, requirementsForMeal } from './queries';
+import { coverageFor, dinersOn, loadContext, plansOn, requirementsForMeal } from './queries';
 import { applyStockChange, reverseMovement } from './stockOps';
 import { nowISO, uid, ValidationError } from './util';
 
@@ -86,6 +86,8 @@ export interface ConsumptionLine {
   quantity: number;
   unit: Unit;
   stock: number | null;
+  /** Produits demandés par la recette que cette référence remplace (même famille). */
+  replaces?: string[];
 }
 
 /** Quantités qui seront déduites si la préparation est confirmée (modifiables avant confirmation). */
@@ -94,13 +96,24 @@ export async function previewCooking(mealId: ID): Promise<{ lines: ConsumptionLi
   if (!m) throw new ValidationError('Repas introuvable.');
   const ctx = await loadContext();
   const { needs, unconverted } = aggregateRequirements(requirementsForMeal(m, ctx), ctx.products);
-  const lines = [...needs.values()]
-    .filter((n) => !n.optional)
-    .map((n) => {
-      const p = ctx.products.get(n.productId)!;
-      return { productId: n.productId, name: p.name, quantity: Math.round(n.quantity * 1000) / 1000, unit: n.unit, stock: p.quantity };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  // La variante réellement disponible est déduite : stock propre d'abord, puis références équivalentes.
+  const required = new Map([...needs].filter(([, n]) => !n.optional));
+  const cover = coverageFor(required, ctx, m.date);
+  const byProduct = new Map<ID, ConsumptionLine>();
+  const add = (productId: ID, quantity: number, replaces?: string) => {
+    const p = ctx.products.get(productId)!;
+    const line = byProduct.get(productId) ?? { productId, name: p.name, quantity: 0, unit: p.unit, stock: p.quantity };
+    line.quantity = Math.round((line.quantity + quantity) * 1000) / 1000;
+    if (replaces) line.replaces = [...(line.replaces ?? []), replaces];
+    byProduct.set(productId, line);
+  };
+  for (const n of required.values()) {
+    const c = cover.get(n.productId);
+    const viaEq = c?.uses.reduce((s, u) => s + u.quantity, 0) ?? 0;
+    if (n.quantity - viaEq > 1e-9) add(n.productId, n.quantity - viaEq);
+    for (const u of c?.uses ?? []) add(u.productId, u.sourceQuantity, ctx.products.get(n.productId)!.name);
+  }
+  const lines = [...byProduct.values()].filter((l) => l.quantity > 0).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   return { lines, unconverted: unconverted.map((u) => `${ctx.products.get(u.productId)?.name ?? u.productId} (${u.quantity} ${u.unit})`) };
 }
 

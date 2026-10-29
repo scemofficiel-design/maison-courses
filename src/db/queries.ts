@@ -1,6 +1,7 @@
 import { addDays, isWithin } from '../domain/dates';
-import { aggregateRequirements, mealRequirements, type AggregationResult, type Diner, type Requirement } from '../domain/portions';
-import type { DietProfile, ID, ISODate, MealPlan, Person, PlannedMeal, Product, Recipe } from '../domain/types';
+import { allocateStock, type Coverage } from '../domain/families';
+import { aggregateRequirements, mealRequirements, type AggregatedNeed, type AggregationResult, type Diner, type Requirement } from '../domain/portions';
+import type { DietProfile, ID, ISODate, MealPlan, Person, PlannedMeal, Product, ProductFamily, Recipe } from '../domain/types';
 import { db } from './db';
 
 export interface Context {
@@ -9,13 +10,15 @@ export interface Context {
   profiles: Map<ID, DietProfile>;
   persons: Map<ID, Person>;
   plans: MealPlan[];
+  families: Map<ID, ProductFamily>;
 }
 
 export async function loadContext(): Promise<Context> {
-  const [products, recipes, profiles, persons, plans] = await Promise.all([
-    db.products.toArray(), db.recipes.toArray(), db.profiles.toArray(), db.persons.toArray(), db.plans.toArray(),
+  const [products, recipes, profiles, persons, plans, families] = await Promise.all([
+    db.products.toArray(), db.recipes.toArray(), db.profiles.toArray(), db.persons.toArray(), db.plans.toArray(), db.families.toArray(),
   ]);
   return {
+    families: new Map(families.map((f) => [f.id, f])),
     products: new Map(products.map((p) => [p.id, p])),
     recipes: new Map(recipes.map((r) => [r.id, r])),
     profiles: new Map(profiles.map((p) => [p.id, p])),
@@ -82,4 +85,9 @@ export async function needsBetween(start: ISODate, end: ISODate, ctx?: Context):
 
 export async function upcomingNeeds(from: ISODate, days: number, ctx?: Context) {
   return needsBetween(from, addDays(from, days - 1), ctx);
+}
+
+/** Couverture des besoins par le stock, références équivalentes des familles comprises. */
+export function coverageFor(needs: Map<ID, AggregatedNeed>, ctx: Context, on: ISODate): Map<ID, Coverage> {
+  return allocateStock([...needs.values()], ctx.products, ctx.families, ctx.profiles, on).coverage;
 }

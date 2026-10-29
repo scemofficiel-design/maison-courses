@@ -1,4 +1,5 @@
 import { db, SCHEMA_VERSION, TABLE_NAMES, type TableName } from './db';
+import { ensureSeed } from './seedOps';
 import { nowISO, ValidationError } from './util';
 
 export const BACKUP_APP = 'maison-courses';
@@ -71,10 +72,16 @@ export async function restoreBackup(data: unknown) {
       if (rows?.length) await db.table(t).bulkAdd(rows);
     }
   });
+  // Une sauvegarde d'une version antérieure reçoit les nouveautés des données initiales (ex. familles),
+  // sans que rien de ce qu'elle contient ne soit remplacé.
+  await ensureSeed();
   return summarize(migrated);
 }
 
-/** Migrations des sauvegardes d'anciennes versions du schéma (aucune pour l'instant : v1). */
+/**
+ * Migrations des sauvegardes d'anciennes versions du schéma.
+ * v1 → v2 : nouvelles tables (familles, prix, reçus) absentes et nouveaux champs facultatifs : rien à transformer.
+ */
 function migrateBackup(b: Backup): Backup {
-  return b;
+  return { ...b, schemaVersion: SCHEMA_VERSION };
 }

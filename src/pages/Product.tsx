@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../db/db';
+import { resolveFamilyDraft } from '../db/familyOps';
 import { addMissingToList } from '../db/shoppingOps';
 import { adjustQuantity, archiveProduct, deleteProduct, markEmpty, markUnknown, recordLoss, reverseMovement, setQuantity, updateProduct } from '../db/stockOps';
 import { forecast } from '../domain/insights';
@@ -17,10 +18,11 @@ export default function ProductPage() {
   const nav = useNavigate();
   const on = useToday();
   const settings = useSettings();
-  const { categoryById, locationById, locations } = useCatalog();
+  const { categoryById, locationById, locations, familyById } = useCatalog();
   const p = useLiveQuery(() => db.products.get(id), [id]);
   const movements = useLiveQuery(() => db.movements.where('productId').equals(id).reverse().sortBy('at'), [id]);
   const recipes = useLiveQuery(() => db.recipes.filter((r) => r.ingredients.some((i) => i.productId === id)).toArray(), [id]);
+  const prices = useLiveQuery(() => db.prices.where('productId').equals(id).reverse().sortBy('date'), [id]) ?? [];
   const [edit, setEdit] = useState<ProductDraft | null>(null);
   const [sheet, setSheet] = useState<'set' | 'loss' | 'move' | null>(null);
   const [num, setNum] = useState<number | null>(null);
@@ -32,7 +34,7 @@ export default function ProductPage() {
 
   const saveEdit = async () => {
     if (!edit) return;
-    const ok = await ui.run(() => updateProduct(p.id, edit), 'Produit enregistré');
+    const ok = await ui.run(async () => updateProduct(p.id, await resolveFamilyDraft(edit)), 'Produit enregistré');
     if (ok !== undefined) setEdit(null);
   };
 
@@ -75,11 +77,20 @@ export default function ProductPage() {
       </div>
 
       <div className="card stack small">
+        {p.familyId && familyById.get(p.familyId) && (
+          <div className="row between"><span className="muted">Famille</span><Link to={`/stocks/famille/${p.familyId}`}>{familyById.get(p.familyId)!.name}{p.variant ? ` · ${p.variant}` : ''}</Link></div>
+        )}
+        {!p.familyId && p.variant && <div className="row between"><span className="muted">Variante</span><span>{p.variant}</span></div>}
+        {p.brand && <div className="row between"><span className="muted">Marque</span><span>{p.brand}</span></div>}
+        {p.format && <div className="row between"><span className="muted">Format d’achat</span><span>{p.format}</span></div>}
         <div className="row between"><span className="muted">Emplacement</span><span>{p.locationId ? `${locationById.get(p.locationId)?.icon ?? ''} ${locationById.get(p.locationId)?.name ?? ''}` : '—'}</span></div>
         <div className="row between"><span className="muted">Péremption</span><span>{p.expiryDate ?? 'Non renseignée'}</span></div>
         <div className="row between"><span className="muted">Date d’achat</span><span>{p.purchaseDate ?? '—'}</span></div>
         <div className="row between"><span className="muted">Prix estimé</span><span>{p.unitPrice !== undefined ? `${formatMoney(p.unitPrice, p.currency)} / ${p.unit}` : '—'}</span></div>
         {p.priceSource && <p className="tiny muted">{p.priceStatus === 'vérifié' ? '✔ ' : 'Estimation — '}{p.priceSource}</p>}
+        {p.lastPrice && (
+          <div className="row between"><span className="muted">Dernier prix payé</span><span className="right">{formatMoney(p.lastPrice.amount, p.currency)} pour {formatQty(p.lastPrice.quantity, p.lastPrice.unit)}<div className="tiny muted">{p.lastPrice.date}{p.lastPrice.store ? ` · ${p.lastPrice.store}` : ''}</div></span></div>
+        )}
         <div className="row between"><span className="muted">Type</span><span>{p.essential ? 'Essentiel' : 'Facultatif'} · {p.perishable ? 'Périssable' : 'Non périssable'}</span></div>
         {p.store && <div className="row between"><span className="muted">Magasin</span><span>{p.store}</span></div>}
         {p.conversions?.map((c) => <div key={c.unit + c.to} className="row between"><span className="muted">Conversion</span><span>1 {c.unit} = {c.amount} {c.to}</span></div>)}
@@ -97,6 +108,23 @@ export default function ProductPage() {
         <section>
           <div className="section-title"><h2>Utilisé dans</h2></div>
           <div className="chips">{recipes.map((r) => <Link key={r.id} className="chip" to={`/recettes/${r.id}`}>{r.name}</Link>)}</div>
+        </section>
+      )}
+
+      {prices.length > 0 && (
+        <section>
+          <div className="section-title"><h2>Historique des prix</h2><span className="small muted">{prices.length}</span></div>
+          <div className="list">
+            {prices.slice(0, 12).map((r) => (
+              <div key={r.id} className="item">
+                <span className="grow">
+                  <span className="title">{formatMoney(r.paid, r.currency)} · {formatQty(r.quantity, r.unit)}{r.format ? ` (${r.format})` : ''}</span>
+                  <div className="meta">{r.date}{r.store ? ` · ${r.store}` : ''} · {r.source === 'reçu' ? 'reçu importé' : 'liste de courses'}{r.discount ? ` · rabais ${formatMoney(r.discount, r.currency)}` : ''}</div>
+                </span>
+                {r.unitPrice !== undefined && <span className="small nowrap">{formatMoney(r.unitPrice, r.currency)} / {p.unit}</span>}
+              </div>
+            ))}
+          </div>
         </section>
       )}
 

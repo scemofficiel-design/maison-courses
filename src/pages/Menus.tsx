@@ -5,11 +5,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { db } from '../db/db';
 import { duplicateWeek, createMeal } from '../db/mealOps';
 import { applyProposals, proposeWeek } from '../db/menuGenOps';
-import { needsBetween } from '../db/queries';
+import { coverageFor, loadContext, needsBetween } from '../db/queries';
 import { addDays, formatDateLong, formatDateShort, parseDate, startOfWeek, WEEKDAYS_SHORT } from '../domain/dates';
 import type { MenuProposal } from '../domain/menuGen';
 import type { MealSlot, PlannedMeal, Recipe } from '../domain/types';
-import { usableQuantity } from '../domain/stock';
 import { formatQty } from '../domain/units';
 import { MAIN_SLOTS, SLOTS, t } from '../i18n/fr';
 import { RecipePicker } from '../ui/bits';
@@ -57,15 +56,18 @@ export default function MenusPage() {
     if (proposals) setGen({ proposals, off: new Set(), economy });
   };
   const showMissing = async () => {
-    const res = await needsBetween(monday, addDays(monday, 6));
-    const products = new Map((await db.products.toArray()).map((p) => [p.id, p]));
+    const ctx = await loadContext();
+    const res = await needsBetween(monday, addDays(monday, 6), ctx);
+    const cover = coverageFor(res.needs, ctx, monday);
     const out: { name: string; text: string }[] = [];
     for (const n of res.needs.values()) {
       if (n.optional) continue;
-      const p = products.get(n.productId)!;
-      const have = usableQuantity(p, monday);
-      if (have === null) out.push({ name: p.name, text: `stock inconnu (${formatQty(n.quantity, n.unit)} nécessaires)` });
-      else if (have < n.quantity) out.push({ name: p.name, text: `manque ${formatQty(n.quantity - have, n.unit)} (besoin ${formatQty(n.quantity, n.unit)})` });
+      const p = ctx.products.get(n.productId)!;
+      const c = cover.get(p.id);
+      if (!c || c.shortfall <= 1e-9) continue;
+      const via = c.uses.length ? ` ; ${c.uses.map((u) => u.name).join(', ')} utilisé(s)` : '';
+      if (c.unknown) out.push({ name: p.name, text: `stock inconnu (${formatQty(n.quantity, n.unit)} nécessaires${via})` });
+      else out.push({ name: p.name, text: `manque ${formatQty(c.shortfall, n.unit)} (besoin ${formatQty(n.quantity, n.unit)}${via})` });
     }
     setMissing(out.sort((a, b) => a.name.localeCompare(b.name, 'fr')));
   };

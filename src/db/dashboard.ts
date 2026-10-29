@@ -1,12 +1,12 @@
 import { addDays } from '../domain/dates';
 import { batchCookingIdeas } from '../domain/insights';
 import { listTotals } from '../domain/shopping';
-import { expiryLevel, productAlerts, stockLevel, usableQuantity, type StockAlert } from '../domain/stock';
+import { expiryLevel, productAlerts, stockLevel, type StockAlert } from '../domain/stock';
 import { mealFeasibility, rankSuggestions, type Feasibility } from '../domain/suggestions';
 import type { ID, ISODate, MealPlan, PlannedMeal, Product, Recipe, ShoppingList } from '../domain/types';
 import { round2 } from '../domain/units';
 import { db } from './db';
-import { dinersOn, isPending, loadContext, needsBetween, personsOn, plansOn, type Context } from './queries';
+import { coverageFor, dinersOn, isPending, loadContext, needsBetween, personsOn, plansOn, type Context } from './queries';
 
 export interface Shortage {
   productId: ID;
@@ -15,6 +15,8 @@ export interface Shortage {
   have: number | null;
   missing: number;
   unit: Product['unit'];
+  /** Références équivalentes utilisées en complément. */
+  via?: string[];
 }
 
 export interface DashboardData {
@@ -32,16 +34,21 @@ export interface DashboardData {
   familyPlan?: MealPlan;
 }
 
+/** Manques réels : le stock des références équivalentes (même famille, autorisées pour les convives) est compté. */
 function shortages(needs: Awaited<ReturnType<typeof needsBetween>>['needs'], ctx: Context, on: ISODate): Shortage[] {
   const out: Shortage[] = [];
+  const cover = coverageFor(needs, ctx, on);
   for (const n of needs.values()) {
     if (n.optional) continue;
     const p = ctx.products.get(n.productId);
     if (!p) continue;
-    const have = usableQuantity(p, on);
-    if (have === null || have + 1e-9 < n.quantity) {
-      out.push({ productId: p.id, name: p.name, need: round2(n.quantity), have, missing: have === null ? round2(n.quantity) : round2(n.quantity - have), unit: p.unit });
-    }
+    const c = cover.get(p.id);
+    if (!c || c.shortfall <= 1e-9) continue;
+    const have = c.unknown ? null : round2(c.covered);
+    out.push({
+      productId: p.id, name: p.name, need: round2(n.quantity), have, missing: round2(c.shortfall), unit: p.unit,
+      via: c.uses.length ? c.uses.map((u) => u.name) : undefined,
+    });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 }
@@ -82,6 +89,7 @@ export async function loadDashboard(on: ISODate, warningDays: number): Promise<D
   const todayNeeds = await needsBetween(on, on, ctx);
   const counts = { available: 0, low: 0, missing: 0, expiring: 0, unknown: 0, total: products.length };
   const alerts: DashboardData['alerts'] = [];
+  const weekCover = coverageFor(week.needs, ctx, on);
   for (const p of products) {
     const lvl = stockLevel(p);
     if (lvl === 'ok' || lvl === 'bas') counts.available++;
@@ -90,7 +98,10 @@ export async function loadDashboard(on: ISODate, warningDays: number): Promise<D
     if (lvl === 'inconnu') counts.unknown++;
     const exp = expiryLevel(p, on, warningDays);
     if (exp === 'bientôt' || exp === 'périmé') counts.expiring++;
-    for (const a of productAlerts(p, on, warningDays, week.needs.get(p.id)?.quantity ?? 0)) {
+    // Besoin restant à la charge du produit lui-même, une fois les références équivalentes utilisées.
+    const c = weekCover.get(p.id);
+    const ownNeed = c ? c.need - c.uses.reduce((s, u) => s + u.quantity, 0) : 0;
+    for (const a of productAlerts(p, on, warningDays, ownNeed)) {
       if (a.kind === 'stock inconnu') continue;
       alerts.push({ ...a, name: p.name });
     }
@@ -117,7 +128,7 @@ export async function loadDashboard(on: ISODate, warningDays: number): Promise<D
   const recipes = (ids: ID[]) => ids.map((id) => ctx.recipes.get(id)).filter((r): r is Recipe => !!r);
   const combos = knownCombos(ctx);
   const feasible = rankSuggestions(
-    combos.map((c) => mealFeasibility(c.title, recipes(c.recipeIds), diners, c.slot, ctx.products, on, warningDays)),
+    combos.map((c) => mealFeasibility(c.title, recipes(c.recipeIds), diners, c.slot, ctx.products, on, warningDays, ctx.families)),
   ).filter((f) => f.missing.filter((m) => !m.optional).length === 0 && f.unknown.length === 0).slice(0, 3);
 
   const priority = products

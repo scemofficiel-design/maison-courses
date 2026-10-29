@@ -15,6 +15,10 @@ export interface Requirement {
   optional: boolean;
   /** Repas ou recettes à l'origine du besoin. */
   sources: string[];
+  /** Profils des personnes qui mangeront cet ingrédient : un remplacement doit les respecter. */
+  profileIds?: ID[];
+  /** La recette exige cette variante précise. */
+  exactVariant?: boolean;
 }
 
 /** Multiplicateur de portion d'une personne pour un rôle (le plus élevé de ses profils, 1 par défaut). */
@@ -71,26 +75,36 @@ export function mealRequirements(
 ): Requirement[] {
   const out: Requirement[] = [];
   if (diners.length === 0) return out;
+  const profileIdsOf = (ds: Diner[]) => [...new Set(ds.flatMap((d) => d.profiles.map((p) => p.id)))];
+  const everyone = profileIdsOf(diners);
   for (const r of recipes) {
     for (const ing of r.ingredients) {
       if (ing.toTaste) continue;
       let qty: number;
+      let profileIds = everyone;
       if (ing.onlyForProfileIds?.length) {
-        const n = diners.filter((d) => dinerHasProfile(d, ing.onlyForProfileIds!)).length;
-        if (n === 0) continue;
-        qty = ing.quantity * n;
+        const eaters = diners.filter((d) => dinerHasProfile(d, ing.onlyForProfileIds!));
+        if (eaters.length === 0) continue;
+        qty = ing.quantity * eaters.length;
+        profileIds = profileIdsOf(eaters);
       } else {
         const servings = diners.reduce((s, d) => s + portionFactor(d, ing.role), 0);
         qty = scaleQuantity(ing.quantity, ing.scaling, servings / r.servings);
       }
-      out.push({ productId: ing.productId, quantity: qty, unit: ing.unit, optional: !!ing.optional, sources: [`${label} — ${r.name}`] });
+      out.push({
+        productId: ing.productId, quantity: qty, unit: ing.unit, optional: !!ing.optional, sources: [`${label} — ${r.name}`],
+        profileIds, exactVariant: ing.exactVariant,
+      });
     }
   }
   for (const d of diners) {
     for (const p of d.profiles) {
       for (const a of p.plateAdditions ?? []) {
         if (a.slot !== slot) continue;
-        out.push({ productId: a.productId, quantity: a.quantity, unit: a.unit, optional: false, sources: [`${label} — ${a.label} (${d.name})`] });
+        out.push({
+          productId: a.productId, quantity: a.quantity, unit: a.unit, optional: false, sources: [`${label} — ${a.label} (${d.name})`],
+          profileIds: profileIdsOf([d]),
+        });
       }
     }
   }
@@ -104,6 +118,10 @@ export interface AggregatedNeed {
   unit: Unit;
   optional: boolean;
   sources: string[];
+  /** Profils concernés par ce besoin (union des repas). */
+  profileIds?: ID[];
+  /** Au moins une recette exige cette variante précise. */
+  exactVariant?: boolean;
 }
 
 export interface AggregationResult {
@@ -131,9 +149,14 @@ export function aggregateRequirements(reqs: Requirement[], products: Map<ID, Pro
     if (prev) {
       prev.quantity += q;
       prev.optional = prev.optional && r.optional;
+      prev.exactVariant = prev.exactVariant || r.exactVariant;
       for (const s of r.sources) if (!prev.sources.includes(s)) prev.sources.push(s);
+      for (const id of r.profileIds ?? []) if (!prev.profileIds!.includes(id)) prev.profileIds!.push(id);
     } else {
-      needs.set(p.id, { productId: p.id, quantity: q, unit: p.unit, optional: r.optional, sources: [...r.sources] });
+      needs.set(p.id, {
+        productId: p.id, quantity: q, unit: p.unit, optional: r.optional, sources: [...r.sources],
+        profileIds: [...(r.profileIds ?? [])], exactVariant: r.exactVariant,
+      });
     }
   }
   for (const n of needs.values()) n.quantity = roundNice(n.quantity);

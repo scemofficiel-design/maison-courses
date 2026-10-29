@@ -1,4 +1,4 @@
-import { BarChart3, ChefHat, Settings, Sparkles, Users } from 'lucide-react';
+import { BarChart3, ChefHat, Receipt, Settings, Sparkles, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHead } from '../ui/kit';
 
@@ -6,6 +6,7 @@ const ITEMS = [
   { to: '/recettes', icon: ChefHat, title: 'Recettes', sub: 'Bibliothèque, portions, compatibilité' },
   { to: '/suggestions', icon: Sparkles, title: 'Que cuisiner ?', sub: 'Repas réalisables avec les stocks' },
   { to: '/profils', icon: Users, title: 'Profils', sub: 'Personnes, régimes, plans alimentaires' },
+  { to: '/courses/import', icon: Receipt, title: 'Importer un reçu', sub: 'Ajouter un achat au stock depuis un fichier JSON' },
   { to: '/budget', icon: BarChart3, title: 'Budget', sub: 'Dépenses et comparaison des périodes' },
   { to: '/parametres', icon: Settings, title: 'Paramètres', sub: 'Sauvegarde, préférences, installation' },
 ];

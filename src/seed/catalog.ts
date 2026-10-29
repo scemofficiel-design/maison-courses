@@ -1,4 +1,4 @@
-import type { Unit, UnitConversion } from '../domain/types';
+import type { SubstitutionMode, Unit, UnitConversion } from '../domain/types';
 
 export interface SeedCategory { id: string; name: string; icon: string; kind: 'alimentaire' | 'maison' }
 export interface SeedLocation { id: string; name: string; icon: string }
@@ -206,3 +206,104 @@ export function parseDocQuantity(label: string): number | null {
   const m = s.match(/^(\d+(?:,\d+)?)/);
   return m ? Number(m[1].replace(',', '.')) : null;
 }
+
+// ---------------------------------------------------------------------------
+// Familles de produits (données initiales v2)
+// ---------------------------------------------------------------------------
+
+export interface SeedFamily { id: string; name: string; categoryId: string; substitution: SubstitutionMode; notes?: string }
+
+const f = (id: string, name: string, categoryId: string, substitution: SubstitutionMode, notes?: string): SeedFamily => ({ id: `fam-${id}`, name, categoryId, substitution, notes });
+
+/**
+ * Règles d'équivalence par défaut, modifiables dans l'application :
+ * « interchangeable » seulement quand toute variante convient à un besoin générique ; « à confirmer » quand
+ * les variantes ne conviennent pas toujours aux mêmes recettes ou profils ; « non » pour un simple regroupement.
+ */
+export const FAMILIES: SeedFamily[] = [
+  f('ail', 'Ail', 'cat-legumes', 'interchangeable'),
+  f('aubergines', 'Aubergines', 'cat-legumes', 'interchangeable'),
+  f('brocoli', 'Brocoli', 'cat-legumes', 'interchangeable'),
+  f('carottes', 'Carottes', 'cat-legumes', 'interchangeable'),
+  f('citrons', 'Citrons', 'cat-legumes', 'interchangeable'),
+  f('concombres', 'Concombres', 'cat-legumes', 'interchangeable'),
+  f('courgettes', 'Courgettes', 'cat-legumes', 'interchangeable'),
+  f('gingembre', 'Gingembre', 'cat-legumes', 'interchangeable'),
+  f('gombo', 'Gombo', 'cat-legumes', 'à confirmer', 'Frais ou surgelé : à confirmer selon la recette.'),
+  f('haricots-verts', 'Haricots verts', 'cat-legumes', 'à confirmer', 'Frais ou surgelés : à confirmer selon la recette.'),
+  f('oignons', 'Oignons', 'cat-legumes', 'interchangeable'),
+  f('poivrons', 'Poivrons', 'cat-legumes', 'interchangeable', 'Rouges, verts ou jaunes : interchangeables pour un besoin générique.'),
+  f('salades', 'Salades', 'cat-legumes', 'à confirmer'),
+  f('tomates', 'Tomates', 'cat-legumes', 'non', 'Fraîches et en conserve ne sont pas interchangeables (les conserves sont exclues du plat de GM).'),
+  f('epinards', 'Épinards', 'cat-legumes', 'à confirmer'),
+  f('avocats', 'Avocats', 'cat-fruits', 'interchangeable'),
+  f('bananes', 'Bananes', 'cat-fruits', 'interchangeable'),
+  f('clementines', 'Clémentines et mandarines', 'cat-fruits', 'interchangeable'),
+  f('oranges', 'Oranges', 'cat-fruits', 'interchangeable'),
+  f('pommes', 'Pommes', 'cat-fruits', 'interchangeable'),
+  f('mangues', 'Mangues', 'cat-fruits', 'interchangeable'),
+  f('poires', 'Poires', 'cat-fruits', 'interchangeable'),
+  f('raisins', 'Raisins', 'cat-fruits', 'interchangeable', 'Raisins frais verts, rouges ou noirs : interchangeables. Les raisins secs, exclus pour GM, ne remplacent jamais des raisins frais.'),
+  f('haricots-secs', 'Haricots secs', 'cat-legumineuses', 'à confirmer'),
+  f('oeufs', 'Œufs', 'cat-oeufs', 'interchangeable'),
+  f('poulet', 'Poulet', 'cat-viandes', 'à confirmer', 'Morceaux différents (cuisses, poitrine) : à confirmer. Le poulet doit rester sans peau pour GM.'),
+  f('poissons-blancs', 'Poissons blancs', 'cat-poissons', 'à confirmer', 'Poissons maigres : à confirmer. Les poissons gras sont exclus pour GM.'),
+  f('lentilles', 'Lentilles', 'cat-legumineuses', 'interchangeable'),
+  f('thon', 'Thon en conserve', 'cat-poissons', 'interchangeable'),
+  f('attieke', 'Attiéké', 'cat-feculents', 'interchangeable'),
+  f('plantain', 'Banane plantain', 'cat-feculents', 'interchangeable'),
+  f('avoine', 'Flocons d’avoine', 'cat-feculents', 'interchangeable'),
+  f('igname', 'Igname', 'cat-feculents', 'interchangeable'),
+  f('pain', 'Pain', 'cat-feculents', 'à confirmer', 'Le pain complet est demandé pour GM : une autre variante est seulement proposée.'),
+  f('patates-douces', 'Patates douces', 'cat-feculents', 'interchangeable'),
+  f('pommes-de-terre', 'Pommes de terre', 'cat-feculents', 'interchangeable'),
+  f('riz', 'Riz', 'cat-feculents', 'à confirmer'),
+  f('pates', 'Pâtes', 'cat-feculents', 'à confirmer'),
+  f('lait', 'Lait', 'cat-laitiers', 'à confirmer', 'Le lait entier est exclu pour GM.'),
+  f('yaourts', 'Yaourts', 'cat-laitiers', 'à confirmer', 'Nature et aux fruits appartiennent à la même famille mais ne conviennent pas aux mêmes profils (le sucre est exclu pour GM).'),
+  f('fromage-blanc', 'Fromage blanc', 'cat-laitiers', 'à confirmer'),
+  f('cubes', 'Cubes de bouillon', 'cat-epices', 'interchangeable'),
+  f('huiles', 'Huiles', 'cat-huiles', 'non', 'Huile d’olive, de palme et de friture ne sont pas interchangeables.'),
+  f('moutarde', 'Moutarde', 'cat-epices', 'interchangeable'),
+  f('epices-base', 'Épices de base', 'cat-epices', 'interchangeable'),
+  f('epices-extra', 'Épices extra', 'cat-epices', 'interchangeable'),
+  f('piment', 'Piment', 'cat-epices', 'interchangeable'),
+  f('sauce-soya', 'Sauce soya', 'cat-epices', 'à confirmer'),
+  f('vinaigre', 'Vinaigre', 'cat-epices', 'à confirmer'),
+  f('bissap', 'Bissap', 'cat-boissons', 'interchangeable'),
+  f('edulcorant', 'Édulcorant', 'cat-epices', 'interchangeable'),
+  f('graines', 'Graines (chia, lin)', 'cat-feculents', 'interchangeable'),
+  f('noix', 'Noix', 'cat-feculents', 'à confirmer'),
+  f('papier-toilette', 'Papier toilette', 'cat-papier', 'interchangeable'),
+  f('essuie-tout', 'Essuie-tout', 'cat-papier', 'interchangeable'),
+  f('savon', 'Savon', 'cat-hygiene', 'interchangeable'),
+  f('dentifrice', 'Dentifrice', 'cat-hygiene', 'interchangeable'),
+  f('shampoing', 'Shampoing', 'cat-hygiene', 'interchangeable'),
+  f('lessive', 'Lessive', 'cat-nettoyage', 'interchangeable'),
+  f('vaisselle', 'Liquide vaisselle', 'cat-nettoyage', 'interchangeable'),
+  f('nettoyant', 'Nettoyant multi-usage', 'cat-nettoyage', 'interchangeable'),
+  f('sacs-poubelle', 'Sacs-poubelle', 'cat-menager', 'interchangeable'),
+];
+
+/** Famille, variante et format d'achat de chaque produit du catalogue : [famille, variante, format]. */
+export const PRODUCT_FAMILY: Record<string, [string, string?, string?]> = {
+  'p-ail': ['ail'], 'p-aubergine': ['aubergines'], 'p-brocoli': ['brocoli'], 'p-carotte': ['carottes'], 'p-citron': ['citrons'],
+  'p-concombre': ['concombres'], 'p-courgette': ['courgettes'], 'p-gingembre': ['gingembre'],
+  'p-gombo': ['gombo', 'surgelé', 'paquet 300 g'], 'p-haricots-verts': ['haricots-verts', 'frais'], 'p-oignon': ['oignons'],
+  'p-poivron': ['poivrons'], 'p-salade': ['salades', 'verte', 'botte'], 'p-tomate': ['tomates', 'fraîches'], 'p-epinards': ['epinards', 'frais', 'sac'],
+  'p-avocat': ['avocats'], 'p-banane': ['bananes'], 'p-clementine': ['clementines'], 'p-orange': ['oranges'], 'p-pomme': ['pommes'],
+  'p-mangue': ['mangues'], 'p-poire': ['poires'],
+  'p-haricots-secs': ['haricots-secs', 'secs'], 'p-oeufs': ['oeufs'], 'p-poulet': ['poulet', 'cuisses et pilons sans peau'],
+  'p-tilapia': ['poissons-blancs', 'tilapia surgelé'], 'p-lentilles': ['lentilles', 'sèches'], 'p-thon': ['thon', 'au naturel', 'boîte'],
+  'p-attieke': ['attieke'], 'p-plantain': ['plantain'], 'p-avoine': ['avoine'], 'p-igname': ['igname'],
+  'p-pain': ['pain', 'complet tranché', 'pain'], 'p-patate-douce': ['patates-douces'], 'p-pdt': ['pommes-de-terre'],
+  'p-riz': ['riz', 'basmati'], 'p-spaghetti': ['pates', 'spaghetti'],
+  'p-lait': ['lait', 'demi-écrémé'], 'p-yaourt': ['yaourts', 'nature 0 %', 'pot 750 g'], 'p-fromage-blanc': ['fromage-blanc', '0 %', 'pot 500 g'],
+  'p-maggi': ['cubes', 'Maggi'], 'p-huile-olive': ['huiles', 'olive', 'bouteille'], 'p-huile-palme': ['huiles', 'palme rouge', 'bouteille'],
+  'p-huile-friture': ['huiles', 'végétale (friture)', 'bouteille'], 'p-moutarde': ['moutarde', 'naturelle', 'pot'],
+  'p-epices': ['epices-base'], 'p-piment': ['piment'], 'p-soya': ['sauce-soya', 'réduite en sel', 'bouteille'], 'p-vinaigre': ['vinaigre', 'de cidre', 'bouteille'],
+  'p-epices-extra': ['epices-extra'], 'p-bissap': ['bissap', 'sec', 'sac 200 g'], 'p-edulcorant': ['edulcorant'],
+  'p-graines': ['graines', 'chia ou lin', 'sac 150 g'], 'p-noix': ['noix', 'non salées', 'sac 200 g'],
+  'p-papier-toilette': ['papier-toilette'], 'p-essuie-tout': ['essuie-tout'], 'p-savon': ['savon'], 'p-dentifrice': ['dentifrice'],
+  'p-shampoing': ['shampoing'], 'p-lessive': ['lessive'], 'p-vaisselle': ['vaisselle'], 'p-nettoyant': ['nettoyant'], 'p-sacs-poubelle': ['sacs-poubelle'],
+};

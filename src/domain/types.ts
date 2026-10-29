@@ -48,7 +48,13 @@ export type Unit =
   | 'c. à soupe'
   | 'c. à café'
   | 'pincée'
-  | 'bol';
+  | 'bol'
+  | 'grappe'
+  | 'barquette'
+  | 'pack'
+  | 'sachet'
+  | 'filet'
+  | 'bocal';
 
 /** Conversion propre à un produit : 1 `unit` du produit = `amount` `to`. Ex. 1 paquet = 300 g. */
 export interface UnitConversion {
@@ -77,6 +83,39 @@ export interface Location extends BaseEntity {
 }
 
 export type PriceStatus = 'document' | 'estimé' | 'vérifié';
+
+/**
+ * Règle de remplacement entre les variantes d'une même famille.
+ * - interchangeable : toute variante couvre le besoin d'une autre (raisins verts ou rouges) ;
+ * - à confirmer : les autres variantes sont proposées, jamais comptées automatiquement (yaourt nature ou aux fruits) ;
+ * - non : regroupement pour l'affichage seulement (tomates fraîches ou en conserve).
+ * Dans tous les cas, deux références de la même variante (autre marque, autre format) restent équivalentes,
+ * et un remplacement interdit par un profil alimentaire n'est jamais proposé.
+ */
+export type SubstitutionMode = 'interchangeable' | 'à confirmer' | 'non';
+
+/** Famille de produits (raisins, yaourts, riz, papier toilette…) regroupant plusieurs variantes et formats. */
+export interface ProductFamily extends BaseEntity {
+  name: string;
+  categoryId: ID;
+  substitution: SubstitutionMode;
+  /** Unité de synthèse du stock global, facultative. Sans conversion connue, les quantités restent séparées par unité. */
+  unit?: Unit;
+  notes?: string;
+}
+
+/** Dernier prix réellement payé pour un produit. */
+export interface LastPrice {
+  /** Montant payé, rabais déduits. */
+  amount: number;
+  quantity: number;
+  unit: Unit;
+  /** Prix par unité du produit, si la conversion est connue. */
+  unitPrice?: number;
+  date: ISODate;
+  store?: string;
+  format?: string;
+}
 
 export interface Product extends BaseEntity {
   name: string;
@@ -111,6 +150,16 @@ export interface Product extends BaseEntity {
   usualWeeklyConsumption?: number;
   barcode?: string;
   archived?: boolean;
+  /** Famille de produits (ex. « Yaourts »). */
+  familyId?: ID;
+  /** Variante dans la famille (ex. « nature 0 % », « verts »). Deux références de même variante sont équivalentes. */
+  variant?: string;
+  brand?: string;
+  /** Format d'achat habituel (ex. « pack de 4 », « grappe », « sac 2 kg »). */
+  format?: string;
+  /** Noms lus sur les reçus et associés à ce produit : reconnus automatiquement aux importations suivantes. */
+  receiptNames?: string[];
+  lastPrice?: LastPrice;
 }
 
 export type MovementType =
@@ -136,7 +185,7 @@ export interface StockMovement {
   unit: Unit;
   at: Timestamp;
   note?: string;
-  sourceType?: 'achat' | 'repas' | 'manuel';
+  sourceType?: 'achat' | 'repas' | 'manuel' | 'reçu';
   sourceId?: ID;
   /** Clé d'idempotence unique : empêche d'appliquer deux fois la même opération. */
   key: string;
@@ -303,6 +352,8 @@ export interface RecipeIngredient {
   toTaste?: boolean;
   /** Si renseigné, l'ingrédient n'est ajouté que dans l'assiette de ces profils (quantité par personne). */
   onlyForProfileIds?: ID[];
+  /** Variante exigée par la recette : les autres variantes de la famille sont proposées, jamais utilisées d'office. */
+  exactVariant?: boolean;
   note?: string;
 }
 
@@ -417,6 +468,69 @@ export interface Purchase {
   movementId?: ID;
   key: string;
   reversed?: boolean;
+  /** Reçu importé qui a confirmé cet achat. */
+  receiptId?: ID;
+}
+
+/** Prix payé à une date : l'historique n'est jamais réécrit. */
+export interface PriceRecord {
+  id: ID;
+  productId: ID;
+  familyId?: ID;
+  date: ISODate;
+  at: Timestamp;
+  store?: string;
+  quantity: number;
+  unit: Unit;
+  format?: string;
+  /** Montant payé, rabais déduits. */
+  paid: number;
+  discount?: number;
+  /** Prix par unité du produit, si la conversion est connue. */
+  unitPrice?: number;
+  currency: string;
+  source: 'reçu' | 'liste';
+  receiptId?: ID;
+  purchaseId?: ID;
+  /** Clé d'idempotence unique. */
+  key: string;
+}
+
+export type ReceiptLineAction = 'ajouté' | 'créé' | 'déjà compté' | 'ignoré';
+
+export interface ReceiptImportLine {
+  index: number;
+  receiptName: string;
+  productId?: ID;
+  action: ReceiptLineAction;
+  /** Quantité ajoutée au stock, dans l'unité du produit (jamais négative). */
+  quantityAdded: number;
+  unit?: Unit;
+  paid?: number;
+  discount?: number;
+  uncertain: string[];
+  movementId?: ID;
+  listLineId?: ID;
+  note?: string;
+}
+
+/** Transaction d'importation d'un reçu de caisse. */
+export interface ReceiptImport {
+  id: ID;
+  /** Empreinte du contenu : empêche d'importer deux fois le même reçu. */
+  fingerprint: string;
+  importedAt: Timestamp;
+  date: ISODate;
+  time?: string;
+  store?: string;
+  total?: number;
+  currency: string;
+  listId?: ID;
+  fileName?: string;
+  lines: ReceiptImportLine[];
+  warnings: string[];
+  /** Contenu du fichier importé, conservé pour la traçabilité. */
+  raw: unknown;
 }
 
 export interface Budget extends BaseEntity {

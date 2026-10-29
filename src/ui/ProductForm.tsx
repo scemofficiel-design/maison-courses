@@ -4,7 +4,8 @@ import { ALL_UNITS } from '../domain/units';
 import { useCatalog } from './hooks';
 import { Field, NumberInput } from './kit';
 
-export type ProductDraft = Omit<Product, 'id' | 'createdAt' | 'updatedAt'>;
+/** `newFamilyName` : famille à créer à l'enregistrement (voir `resolveFamilyDraft`). */
+export type ProductDraft = Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { newFamilyName?: string };
 
 export function emptyDraft(categoryId = 'cat-legumes'): ProductDraft {
   return { name: '', categoryId, unit: 'unité', quantity: null, currency: 'CAD', essential: true, perishable: false, tags: [] };
@@ -12,15 +13,38 @@ export function emptyDraft(categoryId = 'cat-legumes'): ProductDraft {
 
 /** Formulaire de produit : les champs essentiels d'abord, le reste replié. */
 export function ProductForm({ draft, onChange }: { draft: ProductDraft; onChange: (d: ProductDraft) => void }) {
-  const { categories, locations } = useCatalog();
+  const { categories, locations, families } = useCatalog();
   const set = <K extends keyof ProductDraft>(k: K, v: ProductDraft[K]) => onChange({ ...draft, [k]: v });
   const [unknown, setUnknown] = useState(draft.quantity === null);
   const conv: UnitConversion | undefined = draft.conversions?.[0];
+  const [newFamily, setNewFamily] = useState(!!draft.newFamilyName);
   return (
     <div className="stack">
       <Field label="Nom">
         <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Ex. Riz basmati" autoFocus={!draft.name} />
       </Field>
+      <div className="grid2">
+        <Field label="Famille" hint="Regroupe les variantes (ex. Yaourts)">
+          <select value={newFamily ? '__new' : draft.familyId ?? ''} onChange={(e) => {
+            const v = e.target.value;
+            setNewFamily(v === '__new');
+            const fam = families.find((f) => f.id === v);
+            onChange({ ...draft, familyId: v && v !== '__new' ? v : undefined, newFamilyName: v === '__new' ? draft.newFamilyName ?? '' : undefined, categoryId: fam && !draft.name ? fam.categoryId : draft.categoryId });
+          }}>
+            <option value="">Aucune</option>
+            {families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            <option value="__new">➕ Nouvelle famille…</option>
+          </select>
+        </Field>
+        <Field label="Variante" hint="Ex. nature, verts, marque">
+          <input value={draft.variant ?? ''} onChange={(e) => set('variant', e.target.value || undefined)} placeholder="Ex. nature 0 %" />
+        </Field>
+      </div>
+      {newFamily && (
+        <Field label="Nom de la nouvelle famille">
+          <input value={draft.newFamilyName ?? ''} onChange={(e) => set('newFamilyName', e.target.value)} placeholder="Ex. Raisins" />
+        </Field>
+      )}
       <div className="grid2">
         <Field label="Catégorie">
           <select value={draft.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
@@ -80,7 +104,15 @@ export function ProductForm({ draft, onChange }: { draft: ProductDraft; onChange
             </Field>
           </div>
           <div className="grid2">
-            <Field label="Format de vente" hint={`Arrondi des achats (en ${draft.unit})`}>
+            <Field label="Marque">
+              <input value={draft.brand ?? ''} onChange={(e) => set('brand', e.target.value || undefined)} />
+            </Field>
+            <Field label="Format d’achat" hint="Ex. pack de 4, grappe, sac 2 kg">
+              <input value={draft.format ?? ''} onChange={(e) => set('format', e.target.value || undefined)} />
+            </Field>
+          </div>
+          <div className="grid2">
+            <Field label="Pas d’achat" hint={`Arrondi des achats (en ${draft.unit})`}>
               <NumberInput value={draft.purchaseStep} onChange={(v) => set('purchaseStep', v ?? undefined)} ariaLabel="Format de vente" />
             </Field>
             <Field label="Consommation habituelle" hint={`${draft.unit} par semaine, indicatif`}>

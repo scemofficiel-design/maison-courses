@@ -37,7 +37,7 @@ export default function SuggestionsPage() {
     const p = data.ctx.profiles.get(who);
     return p ? [{ personId: 'x', name: p.name, profiles: [p] }] : data.family;
   })();
-  const all = data.combos.filter((c) => c.slot === slot).map((c) => mealFeasibility(c.title, data.recipes(c.recipeIds), diners, c.slot, data.ctx.products, on, settings.expiryWarningDays));
+  const all = data.combos.filter((c) => c.slot === slot).map((c) => mealFeasibility(c.title, data.recipes(c.recipeIds), diners, c.slot, data.ctx.products, on, settings.expiryWarningDays, data.ctx.families));
   const ranked = rankSuggestions(all, filter).slice(0, 25);
   const excluded = all.filter((f) => f.violations.length).length;
   const compatibleWith = (f: Feasibility) => profiles.filter((p) => checkMeal(data.recipes(f.recipeIds), p, data.ctx.products).length === 0).map((p) => p.name);

@@ -24,7 +24,7 @@ export async function proposeWeek(monday: ISODate, opts: WeekGenOptions): Promis
   const diners = dinersOn(monday, ctx);
   const recipes = (ids: string[]) => ids.map((id) => ctx.recipes.get(id)).filter((r): r is Recipe => !!r);
   const starch = new Set([...ctx.recipes.values()].filter((r) => r.category === 'Féculents').map((r) => r.id));
-  return proposeMenus(combos, (c) => mealFeasibility(c.title, recipes(c.recipeIds), diners, c.slot, ctx.products, monday, opts.warningDays), {
+  return proposeMenus(combos, (c) => mealFeasibility(c.title, recipes(c.recipeIds), diners, c.slot, ctx.products, monday, opts.warningDays, ctx.families), {
     start: monday,
     days: 7,
     slots: opts.slots,

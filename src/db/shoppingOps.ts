@@ -1,8 +1,9 @@
-import { proposeShoppingLines, type ProposedLine } from '../domain/shopping';
+import { familyCovers, proposeShoppingLines, type ProposedLine } from '../domain/shopping';
 import type { ID, ISODate, Priority, ShoppingLine, ShoppingList, Unit } from '../domain/types';
-import { convert, round2, roundNice, roundUpToStep, saleStep } from '../domain/units';
+import { convert, formatQty, round2, roundNice, roundUpToStep, saleStep } from '../domain/units';
 import { db } from './db';
 import { loadContext, needsBetween } from './queries';
+import { recordPrice } from './priceOps';
 import { applyStockChange, reverseMovement } from './stockOps';
 import { nowISO, uid, ValidationError } from './util';
 
@@ -165,7 +166,7 @@ export interface BuyInput {
  * ne crée ni un second achat ni une seconde entrée en stock.
  */
 export async function markBought(lineId: ID, input: BuyInput) {
-  return db.transaction('rw', [db.lines, db.purchases, db.products, db.movements, db.lists], async () => {
+  return db.transaction('rw', [db.lines, db.purchases, db.products, db.movements, db.lists, db.prices], async () => {
     const line = await db.lines.get(lineId);
     if (!line) throw new ValidationError('Ligne introuvable.');
     if (line.purchaseId) {
@@ -191,14 +192,15 @@ export async function markBought(lineId: ID, input: BuyInput) {
         });
         movementId = mv.id;
         const today = nowISO().slice(0, 10);
-        const patch: Partial<typeof p> = { purchaseDate: today, updatedAt: nowISO() };
-        if (input.savePrice && input.price !== undefined && quantity > 0) {
-          patch.unitPrice = Math.round((input.price / inProductUnit) * 10000) / 10000;
-          patch.priceStatus = 'vérifié';
-          patch.priceSource = `Prix payé le ${today}`;
-        }
-        await db.products.update(p.id, patch);
+        await db.products.update(p.id, { purchaseDate: today, updatedAt: nowISO() });
       }
+    }
+    if (line.productId && input.price !== undefined) {
+      // Historique des prix ; le prix de référence n'est remplacé que si l'utilisateur le demande.
+      await recordPrice({
+        productId: line.productId, date: nowISO().slice(0, 10), quantity, unit: line.unit, paid: input.price, store: list?.store,
+        currency: list?.currency ?? 'CAD', source: 'liste', purchaseId, key: `purchase:${purchaseId}:price`,
+      }, { updateReference: !!input.savePrice });
     }
     const purchase = {
       id: purchaseId, listId: line.listId, lineId, productId: line.productId, quantity, unit: line.unit, price: input.price,
@@ -259,6 +261,8 @@ export interface GenerationPreview {
   mealCount: number;
   unconverted: { name: string; quantity: number; unit: Unit; sources: string[] }[];
   estimatedTotal: number;
+  /** Besoins entièrement couverts par une référence équivalente de la même famille (rien à acheter). */
+  coveredByEquivalents: { name: string; by: string }[];
 }
 
 /** Calcule une proposition de liste (aperçu, rien n'est enregistré). */
@@ -278,12 +282,21 @@ export async function previewGeneration(req: GenerationRequest): Promise<Generat
       if (q !== null) alreadyListed.set(line.productId, (alreadyListed.get(line.productId) ?? 0) + q);
     }
   }
-  const lines = proposeShoppingLines([...ctx.products.values()], needs, {
+  const opts = {
     includeLowStock: req.includeLowStock,
     includeOptional: req.includeOptional,
     on: req.start,
     alreadyListed,
-  });
+    families: ctx.families,
+    profiles: ctx.profiles,
+  };
+  const lines = proposeShoppingLines([...ctx.products.values()], needs, opts);
+  const listed = new Set(lines.map((l) => l.productId));
+  const coveredByEquivalents: GenerationPreview['coveredByEquivalents'] = [];
+  for (const c of familyCovers([...ctx.products.values()], needs, opts).coverage.values()) {
+    if (!c.uses.length || listed.has(c.productId) || c.shortfall > 1e-9) continue;
+    coveredByEquivalents.push({ name: ctx.products.get(c.productId)!.name, by: c.uses.map((u) => `${u.name} (${formatQty(u.sourceQuantity, u.sourceUnit)})`).join(', ') });
+  }
   const merged = new Map<string, GenerationPreview['unconverted'][number]>();
   for (const u of unconverted) {
     const p = ctx.products.get(u.productId);
@@ -299,6 +312,7 @@ export async function previewGeneration(req: GenerationRequest): Promise<Generat
     mealCount: meals.length,
     unconverted: [...merged.values()],
     estimatedTotal: round2(lines.reduce((s, l) => s + (l.estTotal ?? 0), 0)),
+    coveredByEquivalents,
   };
 }
 

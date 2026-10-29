@@ -1,12 +1,12 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  Budget, Category, DietProfile, Location, MealLog, MealPlan, MetaRecord, Person, PlannedMeal, Product, Purchase, Recipe,
-  Settings, ShoppingLine, ShoppingList, StockMovement, Substitution,
+  Budget, Category, DietProfile, Location, MealLog, MealPlan, MetaRecord, Person, PlannedMeal, PriceRecord, Product, ProductFamily,
+  Purchase, ReceiptImport, Recipe, Settings, ShoppingLine, ShoppingList, StockMovement, Substitution,
 } from '../domain/types';
 
 export const DB_NAME = 'maison-courses';
 /** Version du schéma de données (incluse dans les sauvegardes). */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export class MaisonDB extends Dexie {
   categories!: Table<Category, string>;
@@ -26,6 +26,9 @@ export class MaisonDB extends Dexie {
   substitutions!: Table<Substitution, string>;
   settings!: Table<Settings, string>;
   meta!: Table<MetaRecord, string>;
+  families!: Table<ProductFamily, string>;
+  prices!: Table<PriceRecord, string>;
+  receipts!: Table<ReceiptImport, string>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -50,12 +53,21 @@ export class MaisonDB extends Dexie {
       settings: 'id',
       meta: 'key',
     });
+    // v2 : familles de produits, historique des prix, reçus importés. Les nouveaux champs des produits
+    // (famille, variante, format…) sont facultatifs : aucune donnée existante n'est transformée.
+    // Les familles des produits du catalogue sont ajoutées par la mise à jour des données initiales (seedOps).
+    this.version(2).stores({
+      products: 'id, categoryId, locationId, name, seedKey, barcode, familyId',
+      families: 'id, categoryId, name, seedKey',
+      prices: 'id, productId, familyId, date, &key, receiptId',
+      receipts: 'id, &fingerprint, importedAt, date, listId',
+    });
   }
 }
 
 export const TABLE_NAMES = [
   'categories', 'locations', 'products', 'movements', 'persons', 'profiles', 'plans', 'recipes', 'meals', 'mealLogs',
-  'lists', 'lines', 'purchases', 'budgets', 'substitutions', 'settings', 'meta',
+  'lists', 'lines', 'purchases', 'budgets', 'substitutions', 'settings', 'meta', 'families', 'prices', 'receipts',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
 

@@ -111,6 +111,12 @@ export function GenerateSheet({ open, onClose, targetListId }: { open: boolean; 
               <ul className="clean">{preview.unconverted.map((u) => <li key={u.name + u.unit}>{u.name} : {u.quantity} {u.unit} — ajoutez une conversion dans la fiche produit</li>)}</ul>
             </div>
           )}
+          {preview.coveredByEquivalents.length > 0 && (
+            <div className="card ok small">
+              <strong>Déjà couverts par une autre variante (rien à acheter)</strong>
+              <ul className="clean">{preview.coveredByEquivalents.map((c) => <li key={c.name}>{c.name} : {c.by}</li>)}</ul>
+            </div>
+          )}
           {preview.lines.length === 0 && <p className="muted">{preview.mealCount === 0 && !lowStock ? 'Aucun repas prévu sur cette période.' : 'Rien à acheter : les stocks et les listes ouvertes couvrent les besoins.'}</p>}
           <div className="list">
             {preview.lines.map((l) => (

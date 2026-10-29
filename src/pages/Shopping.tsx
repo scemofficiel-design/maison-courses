@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BarChart3, Plus, Sparkles } from 'lucide-react';
+import { BarChart3, Plus, Receipt, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { db } from '../db/db';
@@ -44,7 +44,7 @@ export default function ShoppingPage() {
 
   return (
     <div className="stack">
-      <PageHead title="Courses" sub="Listes, budget et achats" actions={<Link className="btn small" to="/budget"><BarChart3 /> Budget</Link>} />
+      <PageHead title="Courses" sub="Listes, budget et achats" actions={<><Link className="btn small" to="/courses/import"><Receipt /> Reçu</Link><Link className="btn small" to="/budget"><BarChart3 /> Budget</Link></>} />
       <div className="btn-row">
         <button className="btn primary grow" onClick={() => setGen(true)}><Sparkles /> Générer depuis les menus</button>
         <button className="btn grow" onClick={() => { setDraft({ name: '', date: '', budget: null, store: '' }); setCreating(true); }}><Plus /> Liste libre</button>
