@@ -9,19 +9,24 @@ import { parseNumber } from '../domain/units';
 
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  // `onClose` change à chaque rendu (fonction en ligne) : on le lit via une référence pour que
+  // l'effet ne s'exécute qu'à l'ouverture. Sinon chaque frappe redonnait le focus au volet.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
     window.addEventListener('keydown', onKey);
-    ref.current?.focus();
+    // Ne pas voler le focus d'un champ marqué autoFocus à l'intérieur du volet.
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
     document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
-      prev?.focus?.();
+      prev?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="overlay" onClick={onClose}>
@@ -162,6 +167,11 @@ export function NumberInput({ value, onChange, placeholder, ariaLabel, autoFocus
       placeholder={placeholder}
       aria-label={ariaLabel}
       autoFocus={autoFocus}
+      // Toucher le champ sélectionne la valeur : la saisie la remplace au lieu de s'y ajouter (« 0 » → « 012 »).
+      onFocus={(e) => {
+        const el = e.currentTarget;
+        requestAnimationFrame(() => el.select());
+      }}
       onChange={(e) => {
         setText(e.target.value);
         onChange(parseNumber(e.target.value));

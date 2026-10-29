@@ -1,6 +1,6 @@
 # État d’avancement — Maison & Courses
 
-Dernière mise à jour : 26 octobre 2026 — version 0.1.0 (schéma v1, données initiales v1).
+Dernière mise à jour : 26 octobre 2026 — version 0.1.1 (schéma v1, données initiales v1).
 
 ## Étapes
 
@@ -17,7 +17,7 @@ Dernière mise à jour : 26 octobre 2026 — version 0.1.0 (schéma v1, données
 ## Tests exécutés
 
 - **Unitaires (Vitest, 60 tests)** — `npm test` : unités et arrondis, stock inconnu/nul, alertes, mise à l’échelle et portions individuelles, regroupement, génération des listes (règle « ne pas racheter si le stock suffit »), budget, restrictions (interdits, cuisson, huile par repas), CRUD produit, achats idempotents et correction, préparation confirmée et non-double déduction, import du plan (8 semaines, 4 listes, budgets exacts), démarrage/désactivation/réactivation du plan, données initiales versionnées et réinitialisation sélective, persistance après réouverture, export/restauration, rejet d’une sauvegarde invalide, 24 contrôles d’importation du PDF.
-- **Bout en bout (Playwright, 5 tests)** — `npm run test:e2e` sur la version de production servie sous `/maison-courses/` : manifeste, icônes et portée du service worker sous sous-chemin ; démarrage du plan et persistance après rechargement ; achat en magasin idempotent ; fonctionnement hors ligne (lecture et modification) ; export puis restauration depuis l’interface.
+- **Bout en bout (Playwright, 6 tests)** — `npm run test:e2e` sur la version de production servie sous `/maison-courses/` : manifeste, icônes et portée du service worker sous sous-chemin ; démarrage du plan et persistance après rechargement ; achat en magasin idempotent ; fonctionnement hors ligne (lecture et modification) ; export puis restauration depuis l’interface ; saisie continue au clavier dans les volets (texte et nombres).
 
 Correspondance avec la liste demandée : 1 ✅, 2 ✅, 3 ✅, 4 ✅, 5 ✅, 6 ✅, 7 ✅, 8 ✅, 9 ✅, 10 ✅, 11 ✅, 12 ✅, 13 ✅, 14 ✅, 15 ✅, 16 ✅, 17 ✅, 18 ✅, 19 ✅ (serveur local reproduisant le sous-chemin, puis URL réelle : page, manifeste, service worker, icônes et écrans de lancement en 200 ; portée du service worker `/maison-courses/` et cache hors ligne rempli).
 

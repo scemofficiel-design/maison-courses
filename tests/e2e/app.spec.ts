@@ -122,3 +122,25 @@ test('test 15 — exportation puis restauration d’une sauvegarde depuis l’in
   await page.goto('./#/stocks/p-oignon');
   await expect(page.getByText('9 unités', { exact: true })).toBeVisible({ timeout: 20_000 });
 });
+
+test('saisie continue au clavier dans les volets (texte et nombres)', async ({ page }) => {
+  await page.goto('./#/stocks');
+  await expect(page.getByRole('heading', { name: 'Stocks' })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Ajouter un produit' }).click();
+  const name = page.getByRole('dialog').getByPlaceholder('Ex. Riz basmati');
+  await name.click();
+  // Frappes une par une, comme sur un clavier de téléphone
+  await page.keyboard.type('Riz parfumé', { delay: 30 });
+  await expect(name).toHaveValue('Riz parfumé');
+  await expect(name).toBeFocused();
+  const qty = page.getByRole('dialog').getByLabel('Quantité actuelle');
+  await page.getByRole('dialog').getByText('Je ne sais pas ce qu’il reste').click();
+  await qty.click();
+  await page.keyboard.type('12,5', { delay: 30 });
+  await expect(qty).toHaveValue('12,5');
+  await page.getByRole('dialog').getByRole('button', { name: 'Enregistrer' }).click();
+  await page.getByRole('searchbox').click();
+  await page.keyboard.type('parfum', { delay: 30 });
+  await expect(page.getByRole('searchbox')).toHaveValue('parfum');
+  await expect(page.getByText('12,5 kg').or(page.getByText('12,5 unités'))).toBeVisible();
+});
